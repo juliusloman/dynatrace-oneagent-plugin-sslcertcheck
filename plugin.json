@@ -1,0 +1,71 @@
+{
+  "name": "custom.python.sslcertcheck_plugin",
+  "version": "1.0",
+  "type": "python",
+  "entity": "HOST",
+  "metricGroup": "ssl",
+  "processTypeNames": ["LINUX_SYSTEM", "WINDOWS_SYSTEM"],
+  "source": {
+    "package": "sslcertcheck_plugin",
+    "className": "SSLCertCheck_Plugin",
+    "install_requires": [ "asn1crypto" ],
+    "activation": "Singleton"
+  },
+  "metrics": [ {
+      "timeseries": {
+        "key": "certificates_found",
+        "unit": "Count",
+        "displayname": "Certificates found"
+      }
+    }
+  ],
+   "configUI": {
+        "displayName": "SSL Check Plugin",
+        "properties" : [
+          { "key" : "days_event_info", "displayName": "Info event (days before expiration)", "displayOrder": 1 },
+          { "key" : "days_event_error", "displayName": "Error event (days before expiration)", "displayOrder": 2 },
+          { "key" : "ports_include", "displayName": "Port range to include", "displayOrder": 3 },
+          { "key" : "ports_exclude", "displayName": "Port range to exclude", "displayOrder": 4 },
+          { "key" : "publish_metadata", "displayName": "Show certificate info in metadata", "displayOrder":5 },
+          { "key" : "check_interval", "displayName": "Interval between checks (hours)", "displayOrder":6 },
+          { "key" : "additional_sni", "displayName": "Additional hostnames to check (SNI)", "displayOrder":7 }
+        ]
+    },
+    "properties": [
+      {
+        "key" : "days_event_info",
+        "type" : "Integer",
+        "defaultValue" : 7
+      },      
+      {
+        "key" : "days_event_error",
+        "type" : "Integer",
+        "defaultValue" : 1
+      },      
+      {
+        "key" : "ports_include",
+        "type" : "String",
+        "defaultValue" : "443;1024-65535"
+      },      
+      {
+        "key" : "ports_exclude",
+        "type" : "String",
+        "defaultValue" : ""
+      },            
+      {
+        "key" : "publish_metadata",
+        "type" : "Boolean",
+        "defaultValue" : true
+      },
+      {
+        "key" : "check_interval",
+        "type" : "Integer",
+        "defaultValue" : 4
+      },
+      {
+        "key" : "additional_sni",
+        "type" : "String",
+        "defaultValue" : ""
+      }      
+    ]
+}
