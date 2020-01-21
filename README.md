@@ -11,7 +11,10 @@ This is a Dynatrace OneAgent plugin for checking and verifying SSL/TLS certifica
 
 # Installation
 
-Upload plugin zip file to your Dynatrace tenant and deploy plugin to hosts running OneAgents. Reconfigure default plugin setting in the tennant, if necessary.
+1. Download the release zip file from the [releases] page named custom.python.sslcertcheck_plugin.zip.
+2. Upload the zip file to your Dynatrace tenant in Settings > Monitoring > Monitored technologies > Custom plugins and choose Upload plugin. More information is available in  [Dynatrace help](https://www.dynatrace.com/support/help/shortlink/plugins-python#upload-your-custom-plugin)
+3. Unzip the zip file on OneAgents into /opt/dynatrace/oneagent/plugin_deployment directory on agents or 
+4. OneAgents with the plugin deployed will discover certificates within few minutes. Discovery events can be seen in the events area at the host level and process group level.
 
 # Configuration
 
@@ -27,7 +30,11 @@ Following options can be set in the tenant:
 | Interval between checks (hours) | Interval between checks on each host in hours | 4 |
 | Additional hostnames to check (SNI) | Additional hostnames to use when Server Name Indication is used. This allows checking of services using multiple certificates for a single TLS port. | | 
 
+# Troubleshooting
+
+For troubleshooting check OneAgent plugin engine log.
 
 # Limitations
 
-- Opened TCP port bindings are retrieved from OneAgent and only local TCP ports are checked.
+- Opened TCP port bindings are retrieved from OneAgent and only local TCP ports are checked. Listening IP address is provided by OneAgent. Currently OneAgent supplies 127.0.0.1 as the listening IP address regardless of the actual TCP port binding.
+- Certificate metadata information may not show up correctly in the process group metadata for OneAgent 1.177 - 1.183

@@ -1,0 +1,9 @@
+{
+    "days_event_info": 7,
+    "days_event_resource": 1,
+    "ports_include": "443;1024-65535",
+    "ports_exclude": "",
+    "publish_metadata": true,
+    "check_interval": 4,
+    "additional_sni": ""
+}

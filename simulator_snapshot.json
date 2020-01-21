@@ -1,0 +1,33 @@
+{
+  "entries": [
+    {
+      "process_type": 1,
+      "group_name": "Linux system",
+      "processes": [
+        {
+          "process_name": "python3.5",
+          "properties": {
+            "CmdLine": "-m plugin_sdk.demo_app",
+            "WorkDir": "/home/demo",
+            "ListeningPorts": "8769"
+          }
+        }
+      ]
+    },
+    {
+      "process_type": 10,
+      "group_name": "JBoss X",
+      "processes": [
+        {
+          "process_name": "java",
+          "properties": {
+            "CmdLine": "-cp jboss.jar",
+            "WorkDir": "/home",
+            "ListeningPorts": [ "9090", "9091" ]
+          }
+        }
+      ]
+    }
+
+  ]
+}

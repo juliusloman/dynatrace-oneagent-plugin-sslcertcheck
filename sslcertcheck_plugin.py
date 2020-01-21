@@ -15,7 +15,8 @@ import re
 class SSLCheckResult:
     def __init__(self, sni, certificate):
         self.sni = sni
-        self.certificate = certificate        
+        self.certificate = certificate
+        self.discoverEvent = time.time()      
 
 # Check thread
 class SSLPortChecker(threading.Thread):
@@ -26,7 +27,7 @@ class SSLPortChecker(threading.Thread):
 
     def run(self):
         certs = []
-        self.plugin.logger.info("SSLCheck - SSLPortCheckerThread - checking {b}".format(b=self.binding))
+        self.plugin.logger.debug("SSLCheck - SSLPortCheckerThread - checking {b}".format(b=self.binding))
         try:
             connection = ssl.create_connection(self.binding)
             connection.settimeout(3)
@@ -37,7 +38,7 @@ class SSLPortChecker(threading.Thread):
             serial=remote_cert['tbs_certificate']['serial_number'].native
             # try additional SNI
             for sni in self.plugin.additional_sni:
-                self.plugin.logger.info("SSLCheck - SSLPortCheckerThread - checking {b} SNI {s}".format(b=self.binding, s=sni))
+                self.plugin.logger.debug("SSLCheck - SSLPortCheckerThread - checking {b} SNI {s}".format(b=self.binding, s=sni))
                 connection = ssl.create_connection(self.binding)
                 connection.settimeout(3)
                 context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
@@ -47,8 +48,8 @@ class SSLPortChecker(threading.Thread):
                 if (remote_cert['tbs_certificate']['serial_number'].native!=serial):
                     certs.append(SSLCheckResult(sni=sni, certificate=remote_cert['tbs_certificate']))        
         except:
-            self.plugin.logger.info("SSLCheck - SSLPortCheckerThread - checking {b} - error/timed out".format(b=self.binding))            
-        self.plugin.logger.info("SSLCheck - SSLPortCheckerThread - finished checking {b}".format(b=self.binding))            
+            self.plugin.logger.debug("SSLCheck - SSLPortCheckerThread - checking {b} - error/timed out".format(b=self.binding))            
+        self.plugin.logger.debug("SSLCheck - SSLPortCheckerThread - finished checking {b}".format(b=self.binding))            
         self.plugin.sslinfo[self.binding] = certs
 
 # Main Plugin Class
@@ -95,8 +96,13 @@ class SSLCertCheck_Plugin(BasePlugin):
                     if (self.portInCheckRanges(binding[1])):
                         # Skipping OneAgent ports itself for sanity
                         if (pgi.group_name!="OneAgent system monitoring"):
-                            self.logger.info("Port binding {binding} for process group {pg}".format(binding=binding, pg=pgi.group_name))
+                            self.logger.debug("SSLCheck - Port binding {binding} for process group {pg}".format(binding=binding, pg=pgi.group_name))
                             discoveredBindings.append(binding)
+        if (set(self.checkBindings) != set(discoveredBindings)):
+            self.logger.debug("SSLCheck - Discovered ports do not match previously discovered ports, forcing recheck")
+            self.lastCheck=0
+        else:
+            self.logger.debug("SSLCheckDiscovered ports match previously discovered ports.")
         self.checkBindings=discoveredBindings        
 
     # Trigger check threads
@@ -104,12 +110,11 @@ class SSLCertCheck_Plugin(BasePlugin):
         self.lastCheck = time.time()    
         self.logger.info("SSLCheck - starting check for ports")
         for b in self.checkBindings:
-        #    self.checkPort(b)
             t = SSLPortChecker(b,self)
             t.start()
 
     def initialize(self, **kwargs):
-        self.logger.info("SSLCheck - Initializing")
+        self.logger.debug("SSLCheck - Initializing")
         self.inclusivePortRange=self.parseRanges(self.config["ports_include"])
         self.exclusivePortRange=self.parseRanges(self.config["ports_exclude"])
         if self.config["additional_sni"]:
@@ -120,10 +125,10 @@ class SSLCertCheck_Plugin(BasePlugin):
         self.checkPorts()        
 
     def query(self, **kwargs):
-        self.logger.info("SSLCheck - time {t} lastcheck {l}".format(t=time.time(), l=self.lastCheck))
+        self.logger.debug("SSLCheck - time {t} lastcheck {l}".format(t=time.time(), l=self.lastCheck))
+        self.discoverPorts()
         if (time.time() > (self.lastCheck + self.config["check_interval"]*3600) ):
-            self.logger.info("SSLCheck - check interval due")
-            self.discoverPorts()
+            self.logger.debug("SSLCheck - check interval due")
             self.checkPorts()
 
         # publish results
@@ -145,9 +150,16 @@ class SSLCertCheck_Plugin(BasePlugin):
                     nva=cert['validity']['not_after'].native))
                 certcount=certcount+1                
                 
+                if (check_result.discoverEvent > self.lastCheck):
+                    check_result.discoverEvent = 0
+                    self.results_builder.report_custom_info_event(
+                        description="Certificate CN:{sub} published on {hps} valid from {nvb} valid until {nva}".format(sub=cert['subject'].native['common_name'], hps=hps, nvb=cert['validity']['not_before'].native, nva=cert['validity']['not_after'].native), 
+                        title="Certificate CN:{sub} at {hps} discovered".format(sub=cert['subject'].native['common_name'], hps=hps, nva=cert['validity']['not_after'].native), 
+                        entity_selector=entity)                    
+
                 if (cert['validity']['not_after'].native < datetime.now(timezone.utc) + timedelta(days=self.config['days_event_info'])):
                     # sending info event
-                    self.results_builder.report_error_event(
+                    self.results_builder.report_custom_info_event(
                         description="Certificate for CN:{sub} published on {hps} is expiring at {nva}".format(sub=cert['subject'].native['common_name'], hps=hps, nva=cert['validity']['not_after'].native), 
                         title="Certificate due to expire", 
                         entity_selector=entity)

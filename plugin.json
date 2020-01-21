@@ -1,6 +1,6 @@
 {
   "name": "custom.python.sslcertcheck_plugin",
-  "version": "1.0",
+  "version": "1.01",
   "type": "python",
   "entity": "HOST",
   "metricGroup": "ssl",
