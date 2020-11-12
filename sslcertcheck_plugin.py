@@ -3,6 +3,7 @@ from ruxit.api.snapshot import pgi_name, parse_port_bindings
 from ruxit.api.data import PluginProperty, MEAttribute
 from ruxit.api.selectors import *
 from  datetime import datetime, timezone, timedelta
+import logging
 import threading
 import time
 import idna
@@ -11,7 +12,8 @@ import socket
 import asn1crypto
 import asn1crypto.x509
 import re
- 
+import pytz
+
 class SSLCheckResult:
     def __init__(self, sni, certificate):
         self.sni = sni
@@ -57,6 +59,10 @@ class SSLCertCheck_Plugin(BasePlugin):
     checkBindings=[]
     sslinfo={}
     lastCheck=0
+
+    firstRun = True
+
+    LOCAL_TIMEZONE = datetime.now(timezone.utc).astimezone().tzinfo
 
     # Parse range string
     def parseRanges(self, rangeString: str):
@@ -113,7 +119,19 @@ class SSLCertCheck_Plugin(BasePlugin):
             t = SSLPortChecker(b,self)
             t.start()
 
-    def initialize(self, **kwargs):
+    def dtEventCertProperties(self, certificate:asn1crypto.x509.TbsCertificate, hostPort:str=None):
+        properties={}
+        for cert_prop in ["Subject","Issuer", "Validity"]:
+            for k,v in certificate[cert_prop.lower()].native.items():
+                if isinstance(v, datetime):
+                    properties["{prop} {attr}".format(prop=cert_prop, attr=k)]=v.astimezone(self.LOCAL_TIMEZONE).isoformat()
+                else:
+                    properties["{prop} {attr}".format(prop=cert_prop, attr=k)]=v
+        if hostPort:
+            properties["Certificate found at"]=hostPort
+        return properties
+
+    def initialize(self, **kwargs):        
         self.logger.debug("SSLCheck - Initializing")
         self.inclusivePortRange=self.parseRanges(self.config["ports_include"])
         self.exclusivePortRange=self.parseRanges(self.config["ports_exclude"])
@@ -125,6 +143,14 @@ class SSLCertCheck_Plugin(BasePlugin):
         self.checkPorts()        
 
     def query(self, **kwargs):
+        # Initializes DEBUG logging in first run or when debug setting is true
+        if self.config['debug'] or self.firstRun:
+            self.logger.setLevel(logging.DEBUG)
+            self.firstRun = False
+        else:
+            self.logger.info("Setting log level to WARNING (Debug is %s)", self.config['debug'])
+            self.logger.setLevel(logging.WARNING)
+
         self.logger.debug("SSLCheck - time {t} lastcheck {l}".format(t=time.time(), l=self.lastCheck))
         self.discoverPorts()
         if (time.time() > (self.lastCheck + self.config["check_interval"]*3600) ):
@@ -153,40 +179,36 @@ class SSLCertCheck_Plugin(BasePlugin):
                 if (check_result.discoverEvent > self.lastCheck):
                     check_result.discoverEvent = 0
                     self.results_builder.report_custom_info_event(
-                        description="Certificate CN:{sub} published on {hps} valid from {nvb} valid until {nva}".format(sub=cert['subject'].native['common_name'], hps=hps, nvb=cert['validity']['not_before'].native, nva=cert['validity']['not_after'].native), 
-                        title="Certificate CN:{sub} at {hps} discovered".format(sub=cert['subject'].native['common_name'], hps=hps, nva=cert['validity']['not_after'].native), 
-                        entity_selector=entity)                    
-
-                if (cert['validity']['not_after'].native < datetime.now(timezone.utc) + timedelta(days=self.config['days_event_info'])):
-                    # sending info event
-                    self.results_builder.report_custom_info_event(
-                        description="Certificate for CN:{sub} published on {hps} is expiring at {nva}".format(sub=cert['subject'].native['common_name'], hps=hps, nva=cert['validity']['not_after'].native), 
-                        title="Certificate due to expire", 
-                        entity_selector=entity)
+                        description="Certificate with CN:{sub} published on {hps} discovered".format(sub=cert['subject'].native['common_name'], hps=hps), 
+                        title="Certificate discovered", 
+                        entity_selector=entity,
+                        properties=self.dtEventCertProperties(cert, hps))
                 if (cert['validity']['not_after'].native < datetime.now(timezone.utc) + timedelta(days=self.config['days_event_error'])):
                     # sending error event
                     self.results_builder.report_error_event(
-                        description="Certificate for CN:{sub} published on {hps} is expiring at {nva}".format(sub=cert['subject'].native['common_name'], hps=hps, nva=cert['validity']['not_after'].native), 
+                        description="Certificate expiring in less than {expiring} days".format(expiring=self.config['days_event_info']), 
                         title="Certificate due to expire", 
-                        entity_selector=entity)
-            
+                        entity_selector=entity,
+                        properties=self.dtEventCertProperties(cert, hps))
+                elif (cert['validity']['not_after'].native < datetime.now(timezone.utc) + timedelta(days=self.config['days_event_info'])):
+                    # sending info event
+                    self.results_builder.report_custom_info_event(
+                        description="Certificate expiring in less than {expiring} days".format(expiring=self.config['days_event_info']), 
+                        title="Certificate expiration warning", 
+                        entity_selector=entity,
+                        properties=self.dtEventCertProperties(cert, hps))
+
                 if (self.config["publish_metadata"]==True):
                     # Send certificate metadata to process 
                     self.logger.info("SSLCheck metadata sent for {hps} on subject CN {sub}".format(hps=hps,
                         sub=cert['subject'].native['common_name']))
-                    self.results_builder.add_property(PluginProperty(key="Certificate [{hps}] Subject".format(hps=hps), 
-                        value=cert["subject"].native["common_name"], 
-                        me_attribute=MEAttribute.CUSTOM_PG_METADATA,
-                        entity_selector=entity))
-                    self.results_builder.add_property(PluginProperty(key="Certificate [{hps}] Issuer".format(hps=hps), 
-                        value=cert["issuer"].native["common_name"], 
-                        me_attribute=MEAttribute.CUSTOM_PG_METADATA,
-                        entity_selector=entity))
-                    self.results_builder.add_property(PluginProperty(key="Certificate [{hps}] Valid from".format(hps=hps), 
-                        value=cert['validity']['not_before'].native.isoformat(), 
-                        me_attribute=MEAttribute.CUSTOM_PG_METADATA,
-                        entity_selector=entity))
-                    self.results_builder.add_property(PluginProperty(key="Certificate [{hps}] Valid until".format(hps=hps), 
-                        value=cert['validity']['not_after'].native.isoformat(), 
-                        me_attribute=MEAttribute.CUSTOM_PG_METADATA,
-                        entity_selector=entity))
+                    self.results_builder.add_property(PluginProperty(me_attribute=MEAttribute.CUSTOM_PG_METADATA,
+                                                                     entity_selector=entity,
+                                                                     key="Certificate [{hps}, {cn}]".format(
+                                                                         hps=hps, cn=cert["subject"].native["common_name"]),
+                                                                     value="Valid from:{nvb} to {nva} issued by {issuer}".format(
+                                                                         nvb=cert['validity']['not_before'].native.isoformat(
+                                                                         ),
+                                                                         nva=cert['validity']['not_after'].native.isoformat(
+                                                                         ),
+                                                                         issuer=cert["issuer"].native["common_name"])))

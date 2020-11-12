@@ -6,14 +6,14 @@ This is a Dynatrace OneAgent plugin for checking and verifying SSL/TLS certifica
 
 - Port scope filters (inclusive / exclusive range) - only services with port numbers in the inclusive range and outside the exclusive range are checked.
 - Configurable expiry time information and error event - you can configure when to send events prior to certificate expiration.
-- Certificate metadata - adds certificate information to process group instance metadata
+- Certificate metadata - adds certificate information to process group instance metadata. ![metadata sample](https://user-images.githubusercontent.com/7961782/74569470-c486e280-4f7a-11ea-86f3-6dfa1fcaf80c.png)
 - Support for SNI - you can supply additional FQDNs to be checked
 
 # Installation
 
-1. Download the release zip file from the [releases] page named custom.python.sslcertcheck_plugin.zip.
+1. Download the release zip file from the [releases](releases) page named custom.python.sslcertcheck_plugin.zip.
 2. Upload the zip file to your Dynatrace tenant in Settings > Monitoring > Monitored technologies > Custom plugins and choose Upload plugin. More information is available in  [Dynatrace help](https://www.dynatrace.com/support/help/shortlink/plugins-python#upload-your-custom-plugin)
-3. Unzip the zip file on OneAgents into /opt/dynatrace/oneagent/plugin_deployment directory on agents or 
+3. Unzip the zip file on OneAgents into /opt/dynatrace/oneagent/plugin_deployment directory on hosts with OneAgents or to appropriate plug_deployment directory if you have installed the agent into non-default directory.
 4. OneAgents with the plugin deployed will discover certificates within few minutes. Discovery events can be seen in the events area at the host level and process group level.
 
 # Configuration
@@ -29,6 +29,7 @@ Following options can be set in the tenant:
 | Show certificate info in metadata | Publish certificate info in the process group metadata, works only with recent OneAgents | true | 
 | Interval between checks (hours) | Interval between checks on each host in hours | 4 |
 | Additional hostnames to check (SNI) | Additional hostnames to use when Server Name Indication is used. This allows checking of services using multiple certificates for a single TLS port. | | 
+| Debug logging | Enable DEBUG logging for the plugin | False |
 
 # Troubleshooting
 
